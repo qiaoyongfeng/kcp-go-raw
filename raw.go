@@ -148,14 +148,14 @@ func (raw *RAWConn) sendPacket() (err error) {
 func (raw *RAWConn) sendSyn() (err error) {
 	raw.updateTCP()
 	raw.tcp.SYN = true
-    options := raw.tcp.Options
-    raw.tcp.Options = append(raw.tcp.Options, layers.TCPOption{
-        OptionType: layers.TCPOptionKindMSS,
+	options := raw.tcp.Options
+	raw.tcp.Options = append(raw.tcp.Options, layers.TCPOption{
+		OptionType:   layers.TCPOptionKindMSS,
 		OptionLength: 4,
-		OptionData: []byte{0x5, 0xb4},
-    })
-    err = raw.sendPacket()
-    raw.tcp.Options = options
+		OptionData:   []byte{0x5, 0xb4},
+	})
+	err = raw.sendPacket()
+	raw.tcp.Options = options
 	return
 }
 
@@ -163,14 +163,14 @@ func (conn *RAWConn) sendSynAck() (err error) {
 	conn.updateTCP()
 	conn.tcp.SYN = true
 	conn.tcp.ACK = true
-    options := conn.tcp.Options
-    conn.tcp.Options = append(conn.tcp.Options, layers.TCPOption{
-        OptionType: layers.TCPOptionKindMSS,
+	options := conn.tcp.Options
+	conn.tcp.Options = append(conn.tcp.Options, layers.TCPOption{
+		OptionType:   layers.TCPOptionKindMSS,
 		OptionLength: 4,
-		OptionData: []byte{0x5, 0xb4},
-    })
-    err = conn.sendPacket()
-    conn.tcp.Options = options
+		OptionData:   []byte{0x5, 0xb4},
+	})
+	err = conn.sendPacket()
+	conn.tcp.Options = options
 	return
 }
 
@@ -329,9 +329,8 @@ func dialRAW(address string) (raw *RAWConn, err error) {
 		}
 	}()
 	retry := 0
-    var ackn uint32
-    var seqn uint32
-    log.Println("seqn ", raw.seqn)
+	var ackn uint32
+	var seqn uint32
 	for {
 		if retry > 5 {
 			err = errors.New("retry too many times")
@@ -359,8 +358,8 @@ func dialRAW(address string) (raw *RAWConn, err error) {
 		if tcp.SYN && tcp.ACK {
 			raw.ackn = tcp.Seq + 1
 			raw.seqn++
-            ackn = raw.ackn
-            seqn = raw.seqn
+			ackn = raw.ackn
+			seqn = raw.seqn
 			err = raw.sendAck()
 			if err != nil {
 				return
@@ -399,8 +398,8 @@ func dialRAW(address string) (raw *RAWConn, err error) {
 		}
 		if tcp.SYN && tcp.ACK {
 			// raw.ackn = tcp.Seq + 1
-            raw.ackn = ackn
-            raw.seqn = seqn
+			raw.ackn = ackn
+			raw.seqn = seqn
 			err = raw.sendAck()
 			if err != nil {
 				return
@@ -412,7 +411,7 @@ func dialRAW(address string) (raw *RAWConn, err error) {
 			head := string(tcp.Payload[:4])
 			tail := string(tcp.Payload[n-4:])
 			if head == "HTTP" && tail == "\r\n\r\n" {
-                raw.ackn = tcp.Seq + uint32(n)
+				raw.ackn = tcp.Seq + uint32(n)
 				break
 			}
 		}
@@ -479,6 +478,7 @@ func (listener *RAWListener) doRead(b []byte) (n int, addr *net.UDPAddr, err err
 			listener.cmutex.run(func() {
 				delete(listener.conns, addrstr)
 			})
+			continue
 		}
 		if err != nil {
 			return
@@ -535,7 +535,7 @@ func (listener *RAWListener) doRead(b []byte) (n int, addr *net.UDPAddr, err err
 				if tcp.ACK && !tcp.PSH && !tcp.FIN && !tcp.SYN {
 					info.state = WAITHTTPREQ
 					info.ackn = tcp.Seq + 1
-                    info.seqn++
+					info.seqn++
 				} else if tcp.SYN && !tcp.ACK && !tcp.PSH {
 					listener.raw.ackn = info.ackn
 					listener.raw.seqn = info.seqn
@@ -553,10 +553,10 @@ func (listener *RAWListener) doRead(b []byte) (n int, addr *net.UDPAddr, err err
 							rep := buildHTTPResponse("")
 							info.rep = []byte(rep)
 						}
-                        // err = listener.raw.sendAck()
-                        // if err != nil {
-                        //     return
-                        // }
+						// err = listener.raw.sendAck()
+						// if err != nil {
+						//     return
+						// }
 						listener.raw.tcp.Options = getTCPOptions()
 						_, err = listener.raw.Write(info.rep)
 						listener.raw.tcp.Options = nil
