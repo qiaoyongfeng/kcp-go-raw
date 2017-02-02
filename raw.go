@@ -378,7 +378,6 @@ func dialRAW(address string) (raw *RAWConn, err error) {
 		}
 		retry++
 		raw.tcp.Options = opt
-        log.Println("seqn ", raw.seqn)
 		_, err = raw.Write([]byte(req))
 		if err != nil {
 			return
