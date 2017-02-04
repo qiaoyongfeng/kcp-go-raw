@@ -6,13 +6,14 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/google/gopacket"
-	"github.com/google/gopacket/layers"
 	"log"
 	ran "math/rand"
 	"net"
 	"sync"
 	"time"
+
+	"github.com/google/gopacket"
+	"github.com/google/gopacket/layers"
 )
 
 type callback func()
@@ -316,7 +317,7 @@ func (raw *RAWConn) WriteTo(b []byte, addr net.Addr) (n int, err error) {
 
 func dialRAW(address string) (raw *RAWConn, err error) {
 	udp, err := net.Dial("udp4", address)
-	log.Println(address)
+	// log.Println(address)
 	if err != nil {
 		return
 	}
