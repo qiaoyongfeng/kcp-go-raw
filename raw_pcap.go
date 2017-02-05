@@ -665,7 +665,6 @@ func (listener *RAWListener2) ReadFrom(b []byte) (n int, addr net.Addr, err erro
 		if ok {
 			if info.state == SYNRECEIVED {
 				if tcp.ACK && !tcp.PSH && !tcp.FIN && !tcp.SYN {
-					info.layer.tcp.Ack = tcp.Seq + 1
 					info.layer.tcp.Seq++
 					if NoHTTP {
 						info.state = ESTABLISHED

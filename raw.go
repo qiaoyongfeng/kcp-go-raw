@@ -526,7 +526,6 @@ func (listener *RAWListener) doRead(b []byte) (n int, addr *net.UDPAddr, err err
 		if ok {
 			if info.state == SYNRECEIVED {
 				if tcp.ACK && !tcp.PSH && !tcp.FIN && !tcp.SYN {
-					info.ackn = tcp.Seq + 1
 					info.seqn++
 					if NoHTTP {
 						info.state = ESTABLISHED
