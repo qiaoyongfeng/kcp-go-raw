@@ -21,7 +21,7 @@ func DialWithOptions(raddr string, block kcp.BlockCrypt, dataShards, parityShard
 		}
 		return kcp.NewConn(raddr, block, dataShards, parityShards, conn)
 	}
-	
+
 }
 
 // ListenWithOptions listens for incoming KCP packets addressed to the local address laddr on the network "udp" with packet encryption,

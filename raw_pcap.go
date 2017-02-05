@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"errors"
-	"log"
 	"net"
 	"strconv"
 	"time"
@@ -51,7 +50,6 @@ type RAWConn2 struct {
 
 func (conn *RAWConn2) readLayers() (layer *clayers, err error) {
 	for {
-		log.Println("i want packet")
 		var packet gopacket.Packet
 		if conn.rtimer != nil {
 			select {
@@ -433,7 +431,6 @@ func dialRAW2(address string) (conn *RAWConn2, err error) {
 	opt := getTCPOptions()
 	req := buildHTTPRequest("Host: ltetp.tv189.com\r\nX-Online-Host: ltetp.tv189.com\r\n")
 	for {
-		log.Println(retry)
 		if retry > 5 {
 			err = errors.New("retry too many times")
 			return
@@ -455,7 +452,6 @@ func dialRAW2(address string) (conn *RAWConn2, err error) {
 			if !ok || !e.Temporary() {
 				return
 			} else {
-				log.Println(retry)
 				continue
 			}
 		}
