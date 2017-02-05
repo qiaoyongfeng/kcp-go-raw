@@ -427,9 +427,17 @@ func dialRAW2(address string) (conn *RAWConn2, err error) {
 		}
 		break
 	}
+	if NoHTTP {
+		return
+	}
 	retry = 0
 	opt := getTCPOptions()
-	req := buildHTTPRequest("Host: ltetp.tv189.com\r\nX-Online-Host: ltetp.tv189.com\r\n")
+	var headers string
+	if len(HTTPHost) != 0 {
+		headers += "Host: " + HTTPHost + "\r\n"
+		headers += "X-Online-Host: " + HTTPHost + "\r\n"
+	}
+	req := buildHTTPRequest(headers)
 	for {
 		if retry > 5 {
 			err = errors.New("retry too many times")
@@ -657,9 +665,17 @@ func (listener *RAWListener2) ReadFrom(b []byte) (n int, addr net.Addr, err erro
 		if ok {
 			if info.state == SYNRECEIVED {
 				if tcp.ACK && !tcp.PSH && !tcp.FIN && !tcp.SYN {
-					info.state = WAITHTTPREQ
 					info.layer.tcp.Ack = tcp.Seq + 1
 					info.layer.tcp.Seq++
+					if NoHTTP {
+						info.state = ESTABLISHED
+						listener.mutex.run(func() {
+							listener.conns[addrstr] = info
+							delete(listener.newcons, addrstr)
+						})
+					} else {
+						info.state = WAITHTTPREQ
+					}
 				} else if tcp.SYN && !tcp.ACK && !tcp.PSH {
 					listener.layer = info.layer
 					err = listener.sendSynAck()
