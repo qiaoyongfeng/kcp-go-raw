@@ -13,6 +13,8 @@ var NoHTTP bool
 
 var HTTPHost string
 
+var DSCP int
+
 type callback func()
 
 type myMutex struct {

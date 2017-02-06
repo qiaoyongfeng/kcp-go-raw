@@ -1,9 +1,10 @@
 package kcpraw
 
 import (
+	"runtime"
+
 	"github.com/pkg/errors"
 	kcp "github.com/xtaci/kcp-go"
-	"runtime"
 )
 
 // DialWithOptions connects to the remote address "raddr" on the network "udp" with packet encryption
@@ -21,7 +22,6 @@ func DialWithOptions(raddr string, block kcp.BlockCrypt, dataShards, parityShard
 		}
 		return kcp.NewConn(raddr, block, dataShards, parityShards, conn)
 	}
-
 }
 
 // ListenWithOptions listens for incoming KCP packets addressed to the local address laddr on the network "udp" with packet encryption,
