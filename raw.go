@@ -222,7 +222,9 @@ func (raw *RAWConn) ReadFrom(b []byte) (n int, addr net.Addr, err error) {
 			continue
 		}
 		n = len(tcp.Payload)
-		raw.layer.tcp.Ack += uint32(n)
+		if uint64(tcp.Seq)+uint64(n) > uint64(raw.layer.tcp.Ack) {
+			raw.layer.tcp.Ack = tcp.Seq + uint32(n)
+		}
 		copy(b, tcp.Payload)
 		return n, addr, err
 	}
@@ -482,7 +484,9 @@ func (listener *RAWListener) doRead(b []byte) (n int, addr *net.UDPAddr, err err
 		n = len(tcp.Payload)
 		if ok && n != 0 {
 			t := info.layer.tcp
-			t.Ack += uint32(n)
+			if uint64(tcp.Seq)+uint64(n) > uint64(t.Ack) {
+				t.Ack = tcp.Seq + uint32(n)
+			}
 			//fmt.Println("read from ", addrstr, " to ", tcp.DstPort, " with ", n, " bytes")
 			if info.state == HTTPREPSENT {
 				if tcp.PSH && tcp.ACK {

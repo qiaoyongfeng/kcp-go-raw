@@ -225,6 +225,9 @@ func (conn *RAWConn2) ReadFrom(b []byte) (n int, addr net.Addr, err error) {
 			}
 		}
 		conn.layer.tcp.Ack += uint32(n)
+		if uint64(tcp.Seq)+uint64(n) > uint64(conn.layer.tcp.Ack) {
+			conn.layer.tcp.Ack = tcp.Seq + uint32(n)
+		}
 		copy(b, tcp.Payload)
 		return
 	}
@@ -636,7 +639,9 @@ func (listener *RAWListener2) ReadFrom(b []byte) (n int, addr net.Addr, err erro
 		})
 		n = len(tcp.Payload)
 		if ok && n != 0 {
-			info.layer.tcp.Ack += uint32(n)
+			if uint64(tcp.Seq)+uint64(n) > uint64(info.layer.tcp.Ack) {
+				info.layer.tcp.Ack = tcp.Seq + uint32(n)
+			}
 			if info.state == HTTPREPSENT {
 				if tcp.PSH && tcp.ACK {
 					info.rep = nil
