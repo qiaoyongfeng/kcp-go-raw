@@ -310,7 +310,7 @@ func dialRAW2(address string) (conn *RAWConn2, err error) {
 			return
 		}
 		defer conn.Close()
-		filter := "udp and src port " + strconv.Itoa(ulocaladdr.Port) +
+		filter := "udp and src port " + strconv.Itoa(conn.LocalAddr().(*net.UDPAddr).Port) +
 			" and dst host " + conn.RemoteAddr().(*net.UDPAddr).IP.String() +
 			" and dst port " + strconv.Itoa(conn.RemoteAddr().(*net.UDPAddr).Port)
 		err = handle.SetBPFFilter(filter)
