@@ -391,19 +391,6 @@ func dialRAW(address string) (raw *RAWConn, err error) {
 	return
 }
 
-const (
-	SYNRECEIVED = 0
-	WAITHTTPREQ = 1
-	HTTPREPSENT = 2
-	ESTABLISHED = 3
-)
-
-type connInfo struct {
-	state uint32
-	layer *pktLayers
-	rep   []byte
-}
-
 type RAWListener struct {
 	RAWConn
 	newcons map[string]*connInfo
@@ -632,24 +619,5 @@ func (listener *RAWListener) WriteTo(b []byte, addr net.Addr) (n int, err error)
 	}
 	listener.layer = info.layer
 	n, err = listener.Write(b)
-	return
-}
-
-func getTCPOptions() []layers.TCPOption {
-	return []layers.TCPOption{
-		layers.TCPOption{
-			OptionType:   layers.TCPOptionKindSACKPermitted,
-			OptionLength: 2,
-		},
-	}
-}
-
-func checkTCPOtions(options []layers.TCPOption) (ok bool) {
-	for _, v := range options {
-		if v.OptionType == layers.TCPOptionKindSACKPermitted {
-			ok = true
-			break
-		}
-	}
 	return
 }

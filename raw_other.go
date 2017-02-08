@@ -1,3 +1,5 @@
+// +build !linux
+
 package kcpraw
 
 import (
@@ -13,30 +15,7 @@ import (
 	"github.com/google/gopacket/pcap"
 )
 
-type timeoutErr struct {
-	op string
-}
-
-func (t *timeoutErr) Error() string {
-	return t.op + " timeout"
-}
-
-func (t *timeoutErr) Temporary() bool {
-	return true
-}
-
-func (t *timeoutErr) Timeout() bool {
-	return true
-}
-
-// FIXME
-type pktLayers struct {
-	eth *layers.Ethernet
-	ip4 *layers.IPv4
-	tcp *layers.TCP
-}
-
-type RAWConn2 struct {
+type RAWConn struct {
 	udp     net.Conn
 	handle  *pcap.Handle
 	pktsrc  *gopacket.PacketSource
@@ -48,7 +27,7 @@ type RAWConn2 struct {
 	layer   *pktLayers
 }
 
-func (conn *RAWConn2) readLayers() (layer *pktLayers, err error) {
+func (conn *RAWConn) readLayers() (layer *pktLayers, err error) {
 	for {
 		var packet gopacket.Packet
 		if conn.rtimer != nil {
@@ -86,7 +65,7 @@ func (conn *RAWConn2) readLayers() (layer *pktLayers, err error) {
 	}
 }
 
-func (conn *RAWConn2) Close() (err error) {
+func (conn *RAWConn) Close() (err error) {
 	if conn.udp != nil && conn.handle != nil {
 		conn.sendFin()
 	}
@@ -99,7 +78,7 @@ func (conn *RAWConn2) Close() (err error) {
 	return
 }
 
-func (conn *RAWConn2) sendPacket() (err error) {
+func (conn *RAWConn) sendPacket() (err error) {
 	buffer := gopacket.NewSerializeBuffer()
 	opts := conn.opts
 	layer := conn.layer
@@ -114,7 +93,7 @@ func (conn *RAWConn2) sendPacket() (err error) {
 	return
 }
 
-func (conn *RAWConn2) updateTCP() {
+func (conn *RAWConn) updateTCP() {
 	tcp := conn.layer.tcp
 	tcp.Padding = nil
 	tcp.FIN = false
@@ -124,7 +103,7 @@ func (conn *RAWConn2) updateTCP() {
 	tcp.SYN = false
 }
 
-func (conn *RAWConn2) sendSyn() (err error) {
+func (conn *RAWConn) sendSyn() (err error) {
 	conn.updateTCP()
 	tcp := conn.layer.tcp
 	tcp.SYN = true
@@ -140,7 +119,7 @@ func (conn *RAWConn2) sendSyn() (err error) {
 	return conn.sendPacket()
 }
 
-func (conn *RAWConn2) sendSynAck() (err error) {
+func (conn *RAWConn) sendSynAck() (err error) {
 	conn.updateTCP()
 	tcp := conn.layer.tcp
 	tcp.SYN = true
@@ -157,25 +136,25 @@ func (conn *RAWConn2) sendSynAck() (err error) {
 	return conn.sendPacket()
 }
 
-func (conn *RAWConn2) sendAck() (err error) {
+func (conn *RAWConn) sendAck() (err error) {
 	conn.updateTCP()
 	conn.layer.tcp.ACK = true
 	return conn.sendPacket()
 }
 
-func (conn *RAWConn2) sendFin() (err error) {
+func (conn *RAWConn) sendFin() (err error) {
 	conn.updateTCP()
 	conn.layer.tcp.FIN = true
 	return conn.sendPacket()
 }
 
-func (conn *RAWConn2) sendRst() (err error) {
+func (conn *RAWConn) sendRst() (err error) {
 	conn.updateTCP()
 	conn.layer.tcp.RST = true
 	return conn.sendPacket()
 }
 
-func (conn *RAWConn2) Write(b []byte) (n int, err error) {
+func (conn *RAWConn) Write(b []byte) (n int, err error) {
 	n = len(b)
 	conn.updateTCP()
 	tcp := conn.layer.tcp
@@ -189,7 +168,7 @@ func (conn *RAWConn2) Write(b []byte) (n int, err error) {
 	return n, conn.sendPacket()
 }
 
-func (conn *RAWConn2) ReadFrom(b []byte) (n int, addr net.Addr, err error) {
+func (conn *RAWConn) ReadFrom(b []byte) (n int, addr net.Addr, err error) {
 	defer func() {
 		if conn.rtimer != nil {
 			conn.rtimer.Stop()
@@ -233,33 +212,33 @@ func (conn *RAWConn2) ReadFrom(b []byte) (n int, addr net.Addr, err error) {
 	}
 }
 
-func (conn *RAWConn2) WriteTo(b []byte, addr net.Addr) (n int, err error) {
+func (conn *RAWConn) WriteTo(b []byte, addr net.Addr) (n int, err error) {
 	uaddr := addr.(*net.UDPAddr)
 	conn.layer.ip4.DstIP = uaddr.IP
 	conn.layer.tcp.DstPort = layers.TCPPort(uaddr.Port)
 	return conn.Write(b)
 }
 
-func (conn *RAWConn2) Read(b []byte) (n int, err error) {
+func (conn *RAWConn) Read(b []byte) (n int, err error) {
 	n, _, err = conn.ReadFrom(b)
 	return
 }
 
-func (conn *RAWConn2) LocalAddr() net.Addr {
+func (conn *RAWConn) LocalAddr() net.Addr {
 	return &net.UDPAddr{
 		IP:   conn.layer.ip4.SrcIP,
 		Port: int(conn.layer.tcp.SrcPort),
 	}
 }
 
-func (conn *RAWConn2) RemoteAddr() net.Addr {
+func (conn *RAWConn) RemoteAddr() net.Addr {
 	return &net.UDPAddr{
 		IP:   conn.layer.ip4.DstIP,
 		Port: int(conn.layer.tcp.DstPort),
 	}
 }
 
-func (conn *RAWConn2) SetReadDeadline(t time.Time) (err error) {
+func (conn *RAWConn) SetReadDeadline(t time.Time) (err error) {
 	if conn.rtimer != nil {
 		conn.rtimer.Stop()
 	}
@@ -267,7 +246,7 @@ func (conn *RAWConn2) SetReadDeadline(t time.Time) (err error) {
 	return
 }
 
-func (conn *RAWConn2) SetWriteDeadline(t time.Time) (err error) {
+func (conn *RAWConn) SetWriteDeadline(t time.Time) (err error) {
 	if conn.wtimer != nil {
 		conn.wtimer.Stop()
 	}
@@ -275,7 +254,7 @@ func (conn *RAWConn2) SetWriteDeadline(t time.Time) (err error) {
 	return
 }
 
-func (conn *RAWConn2) SetDeadline(t time.Time) (err error) {
+func (conn *RAWConn) SetDeadline(t time.Time) (err error) {
 	err = conn.SetReadDeadline(t)
 	if err == nil {
 		err = conn.SetWriteDeadline(t)
@@ -283,7 +262,7 @@ func (conn *RAWConn2) SetDeadline(t time.Time) (err error) {
 	return
 }
 
-func dialRAW2(address string) (conn *RAWConn2, err error) {
+func dialRAW(address string) (conn *RAWConn, err error) {
 	ifaces, err := pcap.FindAllDevs()
 	if err != nil {
 		return
@@ -362,7 +341,7 @@ func dialRAW2(address string) (conn *RAWConn2, err error) {
 		return
 	}
 	pktsrc := gopacket.NewPacketSource(handle, handle.LinkType())
-	conn = &RAWConn2{
+	conn = &RAWConn{
 		udp:     udp,
 		buffer:  gopacket.NewSerializeBuffer(),
 		handle:  handle,
@@ -513,22 +492,16 @@ func chooseInterfaceByAddr(addr string) (in pcap.Interface, err error) {
 	return
 }
 
-type connInfo2 struct {
-	state uint32
-	rep   []byte
-	layer *pktLayers
-}
-
-type RAWListener2 struct {
-	RAWConn2
-	newcons map[string]*connInfo2
-	conns   map[string]*connInfo2
+type RAWListener struct {
+	RAWConn
+	newcons map[string]*connInfo
+	conns   map[string]*connInfo
 	mutex   myMutex
 	laddr   *net.IPAddr
 	lport   int
 }
 
-func (listener *RAWListener2) Close() (err error) {
+func (listener *RAWListener) Close() (err error) {
 	conn := listener
 	if conn != nil {
 		listener.mutex.run(func() {
@@ -543,12 +516,12 @@ func (listener *RAWListener2) Close() (err error) {
 	return conn.Close()
 }
 
-func (listener *RAWListener2) closeConn(info *connInfo2) (err error) {
+func (listener *RAWListener) closeConn(info *connInfo) (err error) {
 	listener.layer = info.layer
 	return listener.sendFin()
 }
 
-func listenRAW2(address string) (listener *RAWListener2, err error) {
+func listenRAW(address string) (listener *RAWListener, err error) {
 	udp, err := net.Dial("udp4", address)
 	if err != nil {
 		return
@@ -573,10 +546,10 @@ func listenRAW2(address string) (listener *RAWListener2, err error) {
 		return
 	}
 	pktsrc := gopacket.NewPacketSource(handle, handle.LinkType())
-	listener = &RAWListener2{
+	listener = &RAWListener{
 		laddr: &net.IPAddr{IP: udpaddr.IP},
 		lport: udpaddr.Port,
-		RAWConn2: RAWConn2{
+		RAWConn: RAWConn{
 			buffer:  gopacket.NewSerializeBuffer(),
 			handle:  handle,
 			pktsrc:  pktsrc,
@@ -586,13 +559,13 @@ func listenRAW2(address string) (listener *RAWListener2, err error) {
 				ComputeChecksums: true,
 			},
 		},
-		newcons: make(map[string]*connInfo2),
-		conns:   make(map[string]*connInfo2),
+		newcons: make(map[string]*connInfo),
+		conns:   make(map[string]*connInfo),
 	}
 	return
 }
 
-func (listener *RAWListener2) closeConnByAddr(addrstr string) (err error) {
+func (listener *RAWListener) closeConnByAddr(addrstr string) (err error) {
 	info, ok := listener.newcons[addrstr]
 	if ok {
 		delete(listener.newcons, addrstr)
@@ -608,7 +581,7 @@ func (listener *RAWListener2) closeConnByAddr(addrstr string) (err error) {
 	return
 }
 
-func (listener *RAWListener2) ReadFrom(b []byte) (n int, addr net.Addr, err error) {
+func (listener *RAWListener) ReadFrom(b []byte) (n int, addr net.Addr, err error) {
 	for {
 		var cl *pktLayers
 		cl, err = listener.readLayers()
@@ -632,7 +605,7 @@ func (listener *RAWListener2) ReadFrom(b []byte) (n int, addr net.Addr, err erro
 			}
 			continue
 		}
-		var info *connInfo2
+		var info *connInfo
 		var ok bool
 		listener.mutex.run(func() {
 			info, ok = listener.conns[addrstr]
@@ -755,7 +728,7 @@ func (listener *RAWListener2) ReadFrom(b []byte) (n int, addr net.Addr, err erro
 			tcp: tcp,
 		}
 		if tcp.SYN && !tcp.ACK && !tcp.PSH && !tcp.FIN {
-			info := &connInfo2{
+			info := &connInfo{
 				state: SYNRECEIVED,
 				layer: layer,
 			}
@@ -775,7 +748,7 @@ func (listener *RAWListener2) ReadFrom(b []byte) (n int, addr net.Addr, err erro
 	}
 }
 
-func (listener *RAWListener2) WriteTo(b []byte, addr net.Addr) (n int, err error) {
+func (listener *RAWListener) WriteTo(b []byte, addr net.Addr) (n int, err error) {
 	listener.mutex.Lock()
 	info, ok := listener.conns[addr.String()]
 	listener.mutex.Unlock()
@@ -787,7 +760,7 @@ func (listener *RAWListener2) WriteTo(b []byte, addr net.Addr) (n int, err error
 	return
 }
 
-func (listener *RAWListener2) LocalAddr() net.Addr {
+func (listener *RAWListener) LocalAddr() net.Addr {
 	return &net.UDPAddr{
 		IP:   listener.laddr.IP,
 		Port: listener.lport,
