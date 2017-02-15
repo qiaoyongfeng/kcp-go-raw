@@ -8,39 +8,13 @@ import (
 	"net"
 	"time"
 
-	"os"
 	"os/exec"
-	"os/signal"
 	"strconv"
-	"strings"
-	"syscall"
-
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"golang.org/x/net/bpf"
 	"golang.org/x/net/ipv4"
 )
-
-var sigch chan os.Signal
-var cmds map[string]*exec.Cmd
-var cmdsMutex myMutex
-
-func init() {
-	sigch = make(chan os.Signal, 2)
-	signal.Notify(sigch, syscall.SIGINT, syscall.SIGTERM)
-	go waitsig()
-	cmds = make(map[string]*exec.Cmd)
-}
-
-func waitsig() {
-	<-sigch
-	cmdsMutex.run(func() {
-		for _, v := range cmds {
-			v.Run()
-		}
-	})
-	os.Exit(1)
-}
 
 type RAWConn struct {
 	conn  *net.IPConn
@@ -54,10 +28,7 @@ type RAWConn struct {
 
 func (raw *RAWConn) Close() (err error) {
 	if raw.clean != nil {
-		defer raw.clean.Run()
-		cmdsMutex.run(func() {
-			delete(cmds, strings.Join(raw.clean.Args, ""))
-		})
+		raw.clean.Run()
 	}
 	if raw.udp != nil && raw.wconn != nil {
 		raw.sendFin()
@@ -182,7 +153,7 @@ func (raw *RAWConn) ReadTCPLayer() (tcp *layers.TCP, addr *net.UDPAddr, err erro
 			}
 			return
 		}
-		packet := gopacket.NewPacket(raw.buf[:n], layers.LayerTypeTCP, gopacket.Default)
+		packet := gopacket.NewPacket(raw.buf[:n], layers.LayerTypeTCP, gopacket.NoCopy)
 		tcpLayer := packet.Layer(layers.LayerTypeTCP)
 		if tcpLayer == nil {
 			fmt.Println("bad tcp layer")
@@ -342,9 +313,6 @@ func dialRAW(address string) (raw *RAWConn, err error) {
 			raw.clean = nil
 			return
 		}
-		cmdsMutex.run(func() {
-			cmds[strings.Join(raw.clean.Args, "")] = raw.clean
-		})
 	}()
 	retry := 0
 	layer := raw.layer
@@ -508,9 +476,6 @@ func listenRAW(address string) (listener *RAWListener, err error) {
 	}
 	listener.clean = exec.Command("iptables", "-D", "OUTPUT", "-p", "tcp", "-s", conn.LocalAddr().String(),
 		"--sport", strconv.Itoa(udpaddr.Port), "--tcp-flags", "RST", "RST", "-j", "DROP")
-	cmdsMutex.run(func() {
-		cmds[strings.Join(listener.clean.Args, "")] = listener.clean
-	})
 	return
 }
 
