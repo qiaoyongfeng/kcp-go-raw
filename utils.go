@@ -7,8 +7,6 @@ import (
 	"math/rand"
 	"sync"
 	"time"
-
-	"github.com/google/gopacket/layers"
 )
 
 var NoHTTP bool
@@ -126,41 +124,9 @@ func (t *timeoutErr) Timeout() bool {
 	return true
 }
 
-// FIXME
-type pktLayers struct {
-	eth *layers.Ethernet
-	ip4 *layers.IPv4
-	tcp *layers.TCP
-}
-
 const (
 	SYNRECEIVED = 0
 	WAITHTTPREQ = 1
 	HTTPREPSENT = 2
 	ESTABLISHED = 3
 )
-
-func getTCPOptions() []layers.TCPOption {
-	return []layers.TCPOption{
-		layers.TCPOption{
-			OptionType:   layers.TCPOptionKindSACKPermitted,
-			OptionLength: 2,
-		},
-	}
-}
-
-func checkTCPOtions(options []layers.TCPOption) (ok bool) {
-	for _, v := range options {
-		if v.OptionType == layers.TCPOptionKindSACKPermitted {
-			ok = true
-			break
-		}
-	}
-	return
-}
-
-type connInfo struct {
-	state uint32
-	layer *pktLayers
-	rep   []byte
-}

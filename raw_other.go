@@ -435,6 +435,7 @@ func dialRAW(address string) (conn *RAWConn, err error) {
 		}
 		retry++
 		tcp.Options = opt
+		tcp.Seq = seqn
 		_, err = conn.Write([]byte(req))
 		if err != nil {
 			return
@@ -463,7 +464,7 @@ func dialRAW(address string) (conn *RAWConn, err error) {
 			continue
 		}
 		n := len(cl.tcp.Payload)
-		if cl.tcp.PSH && cl.tcp.ACK && n >= 20 && checkTCPOtions(cl.tcp.Options) {
+		if cl.tcp.PSH && cl.tcp.ACK && n >= 20 && checkTCPOptions(cl.tcp.Options) {
 			head := string(cl.tcp.Payload[:4])
 			tail := string(cl.tcp.Payload[n-4:])
 			if head == "HTTP" && tail == "\r\n\r\n" {
@@ -620,11 +621,11 @@ func (listener *RAWListener) ReadFrom(b []byte) (n int, addr net.Addr, err error
 					info.rep = nil
 					info.state = ESTABLISHED
 				} else {
-					if tcp.PSH && tcp.ACK && checkTCPOtions(tcp.Options) && n > 20 {
+					if tcp.PSH && tcp.ACK && checkTCPOptions(tcp.Options) && n > 20 {
 						head := string(tcp.Payload[:4])
 						tail := string(tcp.Payload[n-4:])
 						if head == "POST" && tail == "\r\n\r\n" {
-							//info.layer.tcp.Ack = tcp.Seq + 1
+							//info.tcp.tcp.Ack = tcp.Seq + 1
 							info.layer.tcp.Ack = tcp.Seq + uint32(n)
 							listener.layer = info.layer
 							listener.layer.tcp.Options = getTCPOptions()
@@ -670,7 +671,7 @@ func (listener *RAWListener) ReadFrom(b []byte) (n int, addr net.Addr, err error
 					}
 				}
 			} else if info.state == WAITHTTPREQ {
-				if tcp.PSH && tcp.ACK && checkTCPOtions(tcp.Options) && n > 20 {
+				if tcp.PSH && tcp.ACK && checkTCPOptions(tcp.Options) && n > 20 {
 					head := string(tcp.Payload[:4])
 					tail := string(tcp.Payload[n-4:])
 					if head == "POST" && tail == "\r\n\r\n" {
@@ -765,4 +766,36 @@ func (listener *RAWListener) LocalAddr() net.Addr {
 		IP:   listener.laddr.IP,
 		Port: listener.lport,
 	}
+}
+
+// FIXME
+type pktLayers struct {
+	eth *layers.Ethernet
+	ip4 *layers.IPv4
+	tcp *layers.TCP
+}
+
+func getTCPOptions() []layers.TCPOption {
+	return []layers.TCPOption{
+		layers.TCPOption{
+			OptionType:   layers.TCPOptionKindSACKPermitted,
+			OptionLength: 2,
+		},
+	}
+}
+
+func checkTCPOptions(options []layers.TCPOption) (ok bool) {
+	for _, v := range options {
+		if v.OptionType == layers.TCPOptionKindSACKPermitted {
+			ok = true
+			break
+		}
+	}
+	return
+}
+
+type connInfo struct {
+	state uint32
+	layer *pktLayers
+	rep   []byte
 }
