@@ -327,7 +327,7 @@ func dialRAW(address string) (conn *RAWConn, err error) {
 		err = errors.New("timeout")
 		return
 	}
-	handle, err := pcap.OpenLive(string(eth.Payload), 65536, true, pcap.BlockForever)
+	handle, err := pcap.OpenLive(string(eth.Payload), 1600, true, time.Millisecond*1)
 	if err != nil {
 		return
 	}
@@ -536,7 +536,7 @@ func listenRAW(address string) (listener *RAWListener, err error) {
 	if err != nil {
 		return
 	}
-	handle, err := pcap.OpenLive(in.Name, 65536, true, pcap.BlockForever)
+	handle, err := pcap.OpenLive(in.Name, 65536, true, time.Millisecond*1)
 	if err != nil {
 		return
 	}
