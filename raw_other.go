@@ -275,64 +275,56 @@ func dialRAW(address string) (conn *RAWConn, err error) {
 	localaddr := &net.IPAddr{IP: ulocaladdr.IP}
 	uremoteaddr := udp.RemoteAddr().(*net.UDPAddr)
 	remoteaddr := &net.IPAddr{IP: uremoteaddr.IP}
-	ethch := make(chan *layers.Ethernet, len(ifaces))
-	f := func(in pcap.Interface) {
-		handle, err := pcap.OpenLive(in.Name, 65536, true, pcap.BlockForever)
-		if err != nil {
-			return
-		}
-		defer handle.Close()
-		buf := make([]byte, 32)
-		binary.Read(rand.Reader, binary.LittleEndian, buf)
-		conn, err := net.DialUDP("udp4", nil, &net.UDPAddr{IP: net.IPv4(8, 8, buf[0], buf[1]), Port: int(binary.LittleEndian.Uint16(buf[2:4]))})
-		if err != nil {
-			return
-		}
-		defer conn.Close()
-		filter := "udp and src port " + strconv.Itoa(conn.LocalAddr().(*net.UDPAddr).Port) +
-			" and dst host " + conn.RemoteAddr().(*net.UDPAddr).IP.String() +
-			" and dst port " + strconv.Itoa(conn.RemoteAddr().(*net.UDPAddr).Port)
-		err = handle.SetBPFFilter(filter)
-		if err != nil {
-			return
-		}
-		pktsrc := gopacket.NewPacketSource(handle, handle.LinkType())
-		packets := pktsrc.Packets()
-		_, err = conn.Write(buf)
-		if err != nil {
-			return
-		}
-		timer := time.NewTimer(time.Second * 2)
-		select {
-		case <-timer.C:
-			return
-		case packet := <-packets:
-			ethLayer := packet.Layer(layers.LayerTypeEthernet)
-			if ethLayer == nil {
-				return
-			}
-			eth, _ := ethLayer.(*layers.Ethernet)
-			eth.Payload = []byte(in.Name)
-			ethch <- eth
-		}
-	}
+	var ifaceName string
 	for _, iface := range ifaces {
-		go f(iface)
+		for _, addr := range iface.Addresses {
+			if addr.IP.Equal(ulocaladdr.IP) {
+				ifaceName = iface.Name
+			}
+		}
 	}
-	timer := time.NewTimer(time.Second * 2)
-	var eth *layers.Ethernet
-	select {
-	case eth = <-ethch:
-	case <-timer.C:
-		err = errors.New("timeout")
+	if len(ifaceName) == 0 {
+		err = errors.New("cannot find correct interface")
 		return
 	}
-	handle, err := pcap.OpenLive(string(eth.Payload), 1600, true, time.Millisecond*1)
+	handle, err := pcap.OpenLive(ifaceName, 65536, true, time.Millisecond)
 	if err != nil {
 		return
 	}
-	eth.Payload = nil
-	filter := "tcp and src host " + remoteaddr.String() +
+	buf := make([]byte, 32)
+	binary.Read(rand.Reader, binary.LittleEndian, buf)
+	uconn, err := net.DialUDP("udp4", nil, &net.UDPAddr{IP: net.IPv4(8, 8, buf[0], buf[1]), Port: int(binary.LittleEndian.Uint16(buf[2:4]))})
+	if err != nil {
+		return
+	}
+	defer uconn.Close()
+	filter := "udp and src port " + strconv.Itoa(uconn.LocalAddr().(*net.UDPAddr).Port) +
+		" and dst host " + uconn.RemoteAddr().(*net.UDPAddr).IP.String() +
+		" and dst port " + strconv.Itoa(uconn.RemoteAddr().(*net.UDPAddr).Port)
+	err = handle.SetBPFFilter(filter)
+	if err != nil {
+		return
+	}
+	pktsrc := gopacket.NewPacketSource(handle, handle.LinkType())
+	packets := pktsrc.Packets()
+	_, err = uconn.Write(buf)
+	if err != nil {
+		return
+	}
+	var eth *layers.Ethernet
+	timer := time.NewTimer(time.Second * 2)
+	select {
+	case <-timer.C:
+		err = errors.New("timeout")
+		return
+	case packet := <-packets:
+		ethLayer := packet.Layer(layers.LayerTypeEthernet)
+		if ethLayer == nil {
+			return
+		}
+		eth, _ = ethLayer.(*layers.Ethernet)
+	}
+	filter = "tcp and src host " + remoteaddr.String() +
 		" and src port " + strconv.Itoa(uremoteaddr.Port) +
 		" and dst host " + localaddr.String() +
 		" and dst port " + strconv.Itoa(ulocaladdr.Port)
@@ -340,13 +332,12 @@ func dialRAW(address string) (conn *RAWConn, err error) {
 	if err != nil {
 		return
 	}
-	pktsrc := gopacket.NewPacketSource(handle, handle.LinkType())
 	conn = &RAWConn{
 		udp:     udp,
 		buffer:  gopacket.NewSerializeBuffer(),
 		handle:  handle,
 		pktsrc:  pktsrc,
-		packets: pktsrc.Packets(),
+		packets: packets,
 		opts: gopacket.SerializeOptions{
 			FixLengths:       true,
 			ComputeChecksums: true,
