@@ -65,7 +65,7 @@ func (conn *RAWConn) readLayers() (layer *pktLayers, err error) {
 	}
 }
 
-func (conn *RAWConn) Close() (err error) {
+func (conn *RAWConn) close() (err error) {
 	if conn.udp != nil && conn.handle != nil {
 		conn.sendFin()
 	}
@@ -76,6 +76,10 @@ func (conn *RAWConn) Close() (err error) {
 		conn.handle.Close()
 	}
 	return
+}
+
+func (conn *RAWConn) Close() (err error) {
+	return conn.close()
 }
 
 func (conn *RAWConn) sendPacket() (err error) {
@@ -505,7 +509,7 @@ func (listener *RAWListener) Close() (err error) {
 			}
 		})
 	}
-	return conn.Close()
+	return conn.close()
 }
 
 func (listener *RAWListener) closeConn(info *connInfo) (err error) {
