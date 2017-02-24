@@ -58,6 +58,9 @@ func (conn *RAWConn) readLayers() (layer *pktLayers, err error) {
 			continue
 		}
 		tcp, _ := tcpLayer.(*layers.TCP)
+		if ignrst && tcp.RST {
+			continue
+		}
 		layer = &pktLayers{
 			eth: eth, ip4: ip4, tcp: tcp,
 		}
@@ -356,7 +359,7 @@ func dialRAW(address string) (conn *RAWConn, err error) {
 				Id:       uint16(src.Int63() % 65536),
 				Flags:    layers.IPv4DontFragment,
 				TTL:      0x40,
-				TOS:      uint8(DSCP),
+				TOS:      uint8(dscp),
 			},
 			tcp: &layers.TCP{
 				SrcPort: layers.TCPPort(ulocaladdr.Port),
@@ -412,15 +415,15 @@ func dialRAW(address string) (conn *RAWConn, err error) {
 		}
 		break
 	}
-	if NoHTTP {
+	if noHTTP {
 		return
 	}
 	retry = 0
 	opt := getTCPOptions()
 	var headers string
-	if len(HTTPHost) != 0 {
-		headers += "Host: " + HTTPHost + "\r\n"
-		headers += "X-Online-Host: " + HTTPHost + "\r\n"
+	if len(httpHost) != 0 {
+		headers += "Host: " + httpHost + "\r\n"
+		headers += "X-Online-Host: " + httpHost + "\r\n"
 	}
 	req := buildHTTPRequest(headers)
 	for {
@@ -592,7 +595,7 @@ func (listener *RAWListener) ReadFrom(b []byte) (n int, addr net.Addr, err error
 		}
 		addr = uaddr
 		addrstr := uaddr.String()
-		if tcp.RST || tcp.FIN {
+		if (tcp.RST) || tcp.FIN {
 			listener.mutex.run(func() {
 				err = listener.closeConnByAddr(addrstr)
 			})
@@ -649,7 +652,7 @@ func (listener *RAWListener) ReadFrom(b []byte) (n int, addr net.Addr, err error
 			if info.state == SYNRECEIVED {
 				if tcp.ACK && !tcp.PSH && !tcp.FIN && !tcp.SYN {
 					info.layer.tcp.Seq++
-					if NoHTTP {
+					if noHTTP {
 						info.state = ESTABLISHED
 						listener.mutex.run(func() {
 							listener.conns[addrstr] = info
@@ -710,7 +713,7 @@ func (listener *RAWListener) ReadFrom(b []byte) (n int, addr net.Addr, err error
 			Id:       uint16(src.Int63() % 65536),
 			Flags:    layers.IPv4DontFragment,
 			TTL:      0x40,
-			TOS:      uint8(DSCP),
+			TOS:      uint8(dscp),
 		}
 		tcp = &layers.TCP{
 			SrcPort: cl.tcp.DstPort,

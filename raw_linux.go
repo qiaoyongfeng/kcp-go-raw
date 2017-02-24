@@ -8,10 +8,11 @@ import (
 	"net"
 	"time"
 
-	"golang.org/x/net/bpf"
-	"golang.org/x/net/ipv4"
 	"os/exec"
 	"strconv"
+
+	"golang.org/x/net/bpf"
+	"golang.org/x/net/ipv4"
 )
 
 type RAWConn struct {
@@ -138,12 +139,16 @@ func (raw *RAWConn) ReadTCPLayer() (tcp *TCPLayer, addr *net.UDPAddr, err error)
 		if err != nil {
 			return
 		}
+		if tcp.chkFlag(RST) {
+			if ignrst {
+				continue
+			} else {
+				err = fmt.Errorf("connect reset by peer %s", addr.String())
+			}
+		}
 		addr = &net.UDPAddr{
 			IP:   ipaddr.IP,
 			Port: tcp.srcPort,
-		}
-		if tcp.chkFlag(RST) {
-			err = fmt.Errorf("connect reset by peer %s", addr.String())
 		}
 		return
 	}
@@ -229,8 +234,8 @@ func dialRAW(address string) (raw *RAWConn, err error) {
 	fatalErr(err)
 	wconn, err := net.ListenIP("ip4:tcp", &net.IPAddr{IP: ulocaladdr.IP})
 	fatalErr(err)
-	if DSCP != 0 {
-		ipv4.NewConn(wconn).SetTOS(DSCP)
+	if dscp != 0 {
+		ipv4.NewConn(wconn).SetTOS(dscp)
 	}
 	rconn, err := ipv4.NewRawConn(conn)
 	fatalErr(err)
@@ -331,15 +336,15 @@ func dialRAW(address string) (raw *RAWConn, err error) {
 			break
 		}
 	}
-	if NoHTTP {
+	if noHTTP {
 		return
 	}
 	retry = 0
 	opt := getTCPOptions()
 	var headers string
-	if len(HTTPHost) != 0 {
-		headers += "Host: " + HTTPHost + "\r\n"
-		headers += "X-Online-Host: " + HTTPHost + "\r\n"
+	if len(httpHost) != 0 {
+		headers += "Host: " + httpHost + "\r\n"
+		headers += "X-Online-Host: " + httpHost + "\r\n"
 	}
 	req := buildHTTPRequest(headers)
 	for {
@@ -416,8 +421,8 @@ func listenRAW(address string) (listener *RAWListener, err error) {
 	if err != nil {
 		return
 	}
-	if DSCP != 0 {
-		ipv4.NewConn(wconn).SetTOS(DSCP)
+	if dscp != 0 {
+		ipv4.NewConn(wconn).SetTOS(dscp)
 	}
 	rconn, err := ipv4.NewRawConn(conn)
 	fatalErr(err)
@@ -525,7 +530,7 @@ func (listener *RAWListener) doRead(b []byte) (n int, addr *net.UDPAddr, err err
 			if info.state == SYNRECEIVED {
 				if tcp.chkFlag(ACK) && !tcp.chkFlag(PSH|FIN|SYN) {
 					t.seqn++
-					if NoHTTP {
+					if noHTTP {
 						info.state = ESTABLISHED
 						listener.mutex.run(func() {
 							listener.conns[addrstr] = info
@@ -852,7 +857,6 @@ func (tcp *TCPLayer) marshal(srcip, dstip net.IP) (data []byte) {
 		case TCPOptionKindEndList, TCPOptionKindNop:
 			start++
 		default:
-			//v.length = uint8(len(v.data) + 2)
 			data[start+1] = v.length
 			copy(data[start+2:start+len(v.data)+2], v.data)
 			start += int(v.length)
@@ -900,9 +904,6 @@ func csum(data []byte, srcip, dstip net.IP) uint16 {
 
 	f(pseudoHeader)
 	f(data)
-
-	//sum = (sum >> 16) + (sum & 0xffff)
-	//sum = sum + (sum >> 16)
 
 	for sum>>16 != 0 {
 		sum = (sum & 0xffff) + (sum >> 16)
