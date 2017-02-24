@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"net"
 	"time"
-
+	
 	"os/exec"
 	"strconv"
-
+	
 	"golang.org/x/net/bpf"
 	"golang.org/x/net/ipv4"
 )
@@ -494,10 +494,7 @@ func (listener *RAWListener) doRead(b []byte) (n int, addr *net.UDPAddr, err err
 			//fmt.Println("read from ", addrstr, " to ", tcp.DstPort, " with ", n, " bytes")
 			if info.state == HTTPREPSENT {
 				if tcp.chkFlag(PSH | ACK) {
-					info.rep = nil
-					info.state = ESTABLISHED
-				} else {
-					if tcp.chkFlag(PSH|ACK) && checkTCPOptions(tcp.options) && n > 20 {
+					if checkTCPOptions(tcp.options) && n > 20 {
 						head := string(tcp.payload[:4])
 						tail := string(tcp.payload[n-4:])
 						if head == "POST" && tail == "\r\n\r\n" {
@@ -510,10 +507,13 @@ func (listener *RAWListener) doRead(b []byte) (n int, addr *net.UDPAddr, err err
 								return
 							}
 						}
+					} else {
+						info.rep = nil
+						info.state = ESTABLISHED
 					}
+				} else {
 					listener.layer = info.layer
 					listener.sendFin()
-					continue
 				}
 			}
 			if info.state == ESTABLISHED {
@@ -522,13 +522,16 @@ func (listener *RAWListener) doRead(b []byte) (n int, addr *net.UDPAddr, err err
 			}
 			continue
 		}
+		if ok && n == 0 {
+			continue
+		}
 		listener.mutex.run(func() {
 			info, ok = listener.newcons[addrstr]
 		})
 		if ok {
 			t := info.layer.tcp
 			if info.state == SYNRECEIVED {
-				if tcp.chkFlag(ACK) && !tcp.chkFlag(PSH|FIN|SYN) {
+				if tcp.chkFlag(ACK) && !tcp.chkFlag(PSH | FIN | SYN) {
 					t.seqn++
 					if noHTTP {
 						info.state = ESTABLISHED
@@ -539,7 +542,7 @@ func (listener *RAWListener) doRead(b []byte) (n int, addr *net.UDPAddr, err err
 					} else {
 						info.state = WAITHTTPREQ
 					}
-				} else if tcp.chkFlag(SYN) && !tcp.chkFlag(ACK|PSH) {
+				} else if tcp.chkFlag(SYN) && !tcp.chkFlag(ACK | PSH) {
 					listener.layer = info.layer
 					err = listener.sendSynAck()
 					if err != nil {
@@ -569,7 +572,7 @@ func (listener *RAWListener) doRead(b []byte) (n int, addr *net.UDPAddr, err err
 							delete(listener.newcons, addrstr)
 						})
 					}
-				} else if tcp.chkFlag(SYN) && !tcp.chkFlag(ACK|PSH) {
+				} else if tcp.chkFlag(SYN) && !tcp.chkFlag(ACK | PSH) {
 					listener.layer = info.layer
 					err = listener.sendSynAck()
 					if err != nil {
@@ -592,7 +595,7 @@ func (listener *RAWListener) doRead(b []byte) (n int, addr *net.UDPAddr, err err
 				data:    make([]byte, 65536),
 			},
 		}
-		if tcp.chkFlag(SYN) && !tcp.chkFlag(ACK|PSH|FIN) {
+		if tcp.chkFlag(SYN) && !tcp.chkFlag(ACK | PSH | FIN) {
 			info = &connInfo{
 				state: SYNRECEIVED,
 				layer: layer,
@@ -696,7 +699,7 @@ const (
 	PSH = 8
 	ACK = 16
 	URG = 32
-
+	
 	ECE = 1
 	CWR = 2
 	NS  = 4
@@ -744,18 +747,18 @@ func decodeTCPlayer(data []byte) (tcp *TCPLayer, err error) {
 			tcp = nil
 		}
 	}()
-
+	
 	length := len(data)
 	if length < TCPLEN {
 		err = fmt.Errorf("Invalid TCP packet length %d < %d", length, TCPLEN)
 		return
 	}
-
+	
 	tcp.srcPort = int(binary.BigEndian.Uint16(data[:2]))
 	tcp.dstPort = int(binary.BigEndian.Uint16(data[2:4]))
 	tcp.seqn = binary.BigEndian.Uint32(data[4:8])
 	tcp.ackn = binary.BigEndian.Uint32(data[8:12])
-
+	
 	u16 := binary.BigEndian.Uint16(data[12:14])
 	tcp.dataOffset = uint8(u16 >> 12)
 	tcp.reserved = uint8(u16 >> 9 & (1<<3 - 1))
@@ -766,19 +769,19 @@ func decodeTCPlayer(data []byte) (tcp *TCPLayer, err error) {
 		return
 	}
 	headerLen := int(tcp.dataOffset) << 2
-
+	
 	tcp.window = binary.BigEndian.Uint16(data[14:16])
 	tcp.chksum = binary.BigEndian.Uint16(data[16:18])
 	tcp.urgent = binary.BigEndian.Uint16(data[18:20])
-
+	
 	if length > headerLen {
 		tcp.payload = data[headerLen:]
 	}
-
+	
 	if headerLen == TCPLEN {
 		return
 	}
-
+	
 	data = data[TCPLEN:headerLen]
 	for len(data) > 0 {
 		if tcp.options == nil {
@@ -806,13 +809,13 @@ func decodeTCPlayer(data []byte) (tcp *TCPLayer, err error) {
 		}
 		data = data[opt.length:]
 	}
-
+	
 	return
 }
 
 func (tcp *TCPLayer) marshal(srcip, dstip net.IP) (data []byte) {
 	tcp.padding = nil
-
+	
 	headerLen := TCPLEN
 	for _, v := range tcp.options {
 		switch v.kind {
@@ -827,18 +830,18 @@ func (tcp *TCPLayer) marshal(srcip, dstip net.IP) (data []byte) {
 		tcp.padding = tcp.pads[:4-rem]
 		headerLen += len(tcp.padding)
 	}
-
+	
 	if len(tcp.data) >= len(tcp.payload)+headerLen {
 		data = tcp.data
 	} else {
 		data = make([]byte, len(tcp.payload)+headerLen)
 	}
-
+	
 	binary.BigEndian.PutUint16(data, uint16(tcp.srcPort))
 	binary.BigEndian.PutUint16(data[2:], uint16(tcp.dstPort))
 	binary.BigEndian.PutUint32(data[4:], tcp.seqn)
 	binary.BigEndian.PutUint32(data[8:], tcp.ackn)
-
+	
 	var u16 uint16
 	tcp.dataOffset = uint8(headerLen / 4)
 	u16 = uint16(tcp.dataOffset) << 12
@@ -846,10 +849,10 @@ func (tcp *TCPLayer) marshal(srcip, dstip net.IP) (data []byte) {
 	u16 |= uint16(tcp.ecn) << 6
 	u16 |= uint16(tcp.flags)
 	binary.BigEndian.PutUint16(data[12:], u16)
-
+	
 	binary.BigEndian.PutUint16(data[14:], tcp.window)
 	binary.BigEndian.PutUint16(data[18:], tcp.urgent)
-
+	
 	start := 20
 	for _, v := range tcp.options {
 		data[start] = byte(v.kind)
@@ -890,9 +893,9 @@ func csum(data []byte, srcip, dstip net.IP) uint16 {
 		0, 0,
 	}
 	binary.BigEndian.PutUint16(pseudoHeader[10:], uint16(len(data)))
-
+	
 	var sum uint32
-
+	
 	f := func(b []byte) {
 		for i := 0; i+1 < len(b); i += 2 {
 			sum += uint32(binary.BigEndian.Uint16(b[i:]))
@@ -901,13 +904,13 @@ func csum(data []byte, srcip, dstip net.IP) uint16 {
 			sum += uint32(binary.BigEndian.Uint16([]byte{b[len(b)-1], 0}))
 		}
 	}
-
+	
 	f(pseudoHeader)
 	f(data)
-
+	
 	for sum>>16 != 0 {
 		sum = (sum & 0xffff) + (sum >> 16)
 	}
-
+	
 	return uint16(^sum)
 }
