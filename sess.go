@@ -3,13 +3,61 @@ package kcpraw
 import (
 	"fmt"
 	"net"
+	"sync"
 
 	"github.com/ccsexyz/rawcon"
 	"github.com/pkg/errors"
 	kcp "github.com/xtaci/kcp-go"
 )
 
-var raw rawcon.Raw
+var (
+	raw rawcon.Raw
+
+	mssCache     map[string]int
+	mssCacheLock sync.Mutex
+
+	lisCache     map[string]*rawcon.RAWListener
+	lisCacheLock sync.Mutex
+)
+
+func init() {
+	mssCache = make(map[string]int)
+	lisCache = make(map[string]*rawcon.RAWListener)
+}
+
+func GetMSSByAddr(laddr net.Addr, raddr net.Addr) int {
+	s := laddr.String() + raddr.String()
+	mssCacheLock.Lock()
+	defer mssCacheLock.Unlock()
+	mss, ok := mssCache[s]
+	if ok {
+		return mss
+	}
+	return 0
+}
+
+func putMSSByAddr(laddr net.Addr, raddr net.Addr, mss int) {
+	s := laddr.String() + raddr.String()
+	mssCacheLock.Lock()
+	defer mssCacheLock.Unlock()
+	mssCache[s] = mss
+}
+
+func GetListenerByAddr(laddr net.Addr) *rawcon.RAWListener {
+	lisCacheLock.Lock()
+	defer lisCacheLock.Unlock()
+	lis, ok := lisCache[laddr.String()]
+	if ok {
+		return lis
+	}
+	return nil
+}
+
+func putListenerByAddr(laddr net.Addr, lis *rawcon.RAWListener) {
+	lisCacheLock.Lock()
+	defer lisCacheLock.Unlock()
+	lisCache[laddr.String()] = lis
+}
 
 func checkAddr(addr string) (err error) {
 	host, _, err := net.SplitHostPort(addr)
@@ -33,6 +81,7 @@ func DialWithOptions(raddr string, block kcp.BlockCrypt, dataShards, parityShard
 	if err != nil {
 		return nil, errors.Wrap(err, "net.DialRAW")
 	}
+	putMSSByAddr(conn.LocalAddr(), conn.RemoteAddr(), conn.GetMSS())
 	return kcp.NewConn(raddr, block, dataShards, parityShards, conn)
 }
 
@@ -47,6 +96,7 @@ func ListenWithOptions(laddr string, block kcp.BlockCrypt, dataShards, paritySha
 	if err != nil {
 		return nil, errors.Wrap(err, "net.ListenRAW")
 	}
+	putListenerByAddr(conn.LocalAddr(), conn)
 	return kcp.ServeConn(block, dataShards, parityShards, conn)
 }
 
