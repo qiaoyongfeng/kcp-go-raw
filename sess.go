@@ -119,3 +119,8 @@ func SetDSCP(v int) {
 func SetIgnRST(v bool) {
 	raw.IgnRST = v
 }
+
+// SetMixed if v is true, the server will accept both http request and tcp request
+func SetMixed(v bool) {
+	raw.Mixed = v
+}
