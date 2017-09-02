@@ -77,97 +77,85 @@ func checkAddr(addr string) (err error) {
 }
 
 // DialWithOptions connects to the remote address "raddr" on the network "udp" with packet encryption
-func DialWithOptions(raddr string, block kcp.BlockCrypt, dataShards, parityShards int) (*kcp.UDPSession, error) {
-	err := checkAddr(raddr)
-	if err != nil {
-		return nil, errors.Wrap(err, "checkAddr")
-	}
-	conn, err := raw.DialRAW(raddr)
-	if err != nil {
-		return nil, errors.Wrap(err, "net.DialRAW")
-	}
-	putMSSByAddr(conn.LocalAddr(), conn.RemoteAddr(), conn.GetMSS())
-	return kcp.NewConn(raddr, block, dataShards, parityShards, conn)
-}
+func DialWithOptions(raddr string, block kcp.BlockCrypt, dataShards, parityShards int, password string, mulconn int, udp bool) (*kcp.UDPSession, error) {
+	var dialer func() (conn net.Conn, err error)
+	var conn net.PacketConn
+	var err error
 
-func DialMulWithOptions_udp(raddr string, block kcp.BlockCrypt, dataShards, parityShards int) (*kcp.UDPSession, error) {
-	udpaddr, err := net.ResolveUDPAddr("udp4", raddr)
+	if udp {
+		udpaddr, err := net.ResolveUDPAddr("udp4", raddr)
+		if err != nil {
+			return nil, err
+		}
+		dialer = func() (conn net.Conn, err error) {
+			rawconn, err := net.DialUDP("udp4", nil, udpaddr)
+			conn = rawconn
+			return
+		}
+	} else {
+		err := checkAddr(raddr)
+		if err != nil {
+			return nil, errors.Wrap(err, "checkAddr")
+		}
+		dialer = func() (conn net.Conn, err error) {
+			rawconn, err := raw.DialRAW(raddr)
+			conn = rawconn
+			putMSSByAddr(rawconn.LocalAddr(), rawconn.RemoteAddr(), rawconn.GetMSS())
+			return
+		}
+	}
+
+	if mulconn > 0 {
+		conn, err = mulcon.Dial(dialer, mulconn, mulconMethod, password)
+	} else {
+		var c net.Conn
+		c, err = dialer()
+		c2, ok := c.(*net.UDPConn)
+		if ok {
+			conn = c2
+		} else {
+			conn = c.(*rawcon.RAWConn)
+		}
+	}
 	if err != nil {
 		return nil, err
-	}
-	dialer := func() (conn net.Conn, err error) {
-		rawconn, err := net.DialUDP("udp4", nil, udpaddr)
-		conn = rawconn
-		return
-	}
-	conn, err := mulcon.Dial(dialer, 10, mulconMethod, "123")
-	if err != nil {
-		return nil, errors.Wrap(err, "DialMulWithOptions")
-	}
-	return kcp.NewConn(raddr, block, dataShards, parityShards, conn)
-}
-
-func DialMulWithOptions(raddr string, block kcp.BlockCrypt, dataShards, parityShards int, password string, mulconn int) (*kcp.UDPSession, error) {
-	err := checkAddr(raddr)
-	if err != nil {
-		return nil, errors.Wrap(err, "checkAddr")
-	}
-	dialer := func() (conn net.Conn, err error) {
-		rawconn, err := raw.DialRAW(raddr)
-		conn = rawconn
-		return
-	}
-	conn, err := mulcon.Dial(dialer, mulconn, mulconMethod, password)
-	if err != nil {
-		return nil, errors.Wrap(err, "DialMulWithOptions")
 	}
 	return kcp.NewConn(raddr, block, dataShards, parityShards, conn)
 }
 
 // ListenWithOptions listens for incoming KCP packets addressed to the local address laddr on the network "udp" with packet encryption,
 // dataShards, parityShards defines Reed-Solomon Erasure Coding parameters
-func ListenWithOptions(laddr string, block kcp.BlockCrypt, dataShards, parityShards int) (*kcp.Listener, error) {
-	err := checkAddr(laddr)
-	if err != nil {
-		return nil, errors.Wrap(err, "checkAddr")
+func ListenWithOptions(laddr string, block kcp.BlockCrypt, dataShards, parityShards int, password string, usemul bool, udp bool) (*kcp.Listener, error) {
+	var conn net.PacketConn
+	var err error
+
+	if udp {
+		udpaddr, err := net.ResolveUDPAddr("udp4", laddr)
+		if err != nil {
+			return nil, err
+		}
+		conn, err = net.ListenUDP("udp4", udpaddr)
+		if err != nil {
+			return nil, errors.Wrap(err, "net.ListenUDP")
+		}
+	} else {
+		err = checkAddr(laddr)
+		if err != nil {
+			return nil, errors.Wrap(err, "checkAddr")
+		}
+		lis, err := raw.ListenRAW(laddr)
+		if err != nil {
+			return nil, errors.Wrap(err, "net.ListenRAW")
+		}
+		putListenerByAddr(lis.LocalAddr(), lis)
+		conn = lis
 	}
-	conn, err := raw.ListenRAW(laddr)
-	if err != nil {
-		return nil, errors.Wrap(err, "net.ListenRAW")
+
+	if usemul {
+		conn, err = mulcon.Listen(conn, mulconMethod, password)
 	}
-	putListenerByAddr(conn.LocalAddr(), conn)
+
 	return kcp.ServeConn(block, dataShards, parityShards, conn)
-}
-
-func ListenMulWithOptions_udp(laddr string, block kcp.BlockCrypt, dataShards, parityShards int) (*kcp.Listener, error) {
-	udpaddr, err := net.ResolveUDPAddr("udp4", laddr)
-	if err != nil {
-		return nil, err
-	}
-	conn, err := net.ListenUDP("udp4", udpaddr)
-	// conn, err := raw.ListenRAW(laddr)
-	if err != nil {
-		return nil, errors.Wrap(err, "net.ListenRAW")
-	}
-	// putListenerByAddr(conn.LocalAddr(), conn)
-	listener, err := mulcon.Listen(conn, mulconMethod, "123")
-	if err != nil {
-		return nil, errors.Wrap(err, "ListenMulWithOptions")
-	}
-	return kcp.ServeConn(block, dataShards, parityShards, listener)
-}
-
-func ListenMulWithOptions(laddr string, block kcp.BlockCrypt, dataShards, parityShards int, password string) (*kcp.Listener, error) {
-	conn, err := raw.ListenRAW(laddr)
-	if err != nil {
-		return nil, errors.Wrap(err, "net.ListenRAW")
-	}
-	// putListenerByAddr(conn.LocalAddr(), conn)
-	listener, err := mulcon.Listen(conn, mulconMethod, password)
-	if err != nil {
-		return nil, errors.Wrap(err, "ListenMulWithOptions")
-	}
-	return kcp.ServeConn(block, dataShards, parityShards, listener)
 }
 
 // SetNoHTTP determines whether to do http obfuscating
