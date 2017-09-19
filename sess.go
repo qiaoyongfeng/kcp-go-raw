@@ -76,11 +76,10 @@ func checkAddr(addr string) (err error) {
 	return
 }
 
-// DialWithOptions connects to the remote address "raddr" on the network "udp" with packet encryption
-func DialWithOptions(raddr string, block kcp.BlockCrypt, dataShards, parityShards int, password string, mulconn int, udp bool) (*kcp.UDPSession, error) {
+// DialUDP connects to the remote address raddr on the network udp/fake-tcp
+// mulconn is enabled if mulconn > 0
+func DialUDP(raddr string, password string, mulconn int, udp bool) (conn net.PacketConn, err error) {
 	var dialer func() (conn net.Conn, err error)
-	var conn net.PacketConn
-	var err error
 
 	if udp {
 		udpaddr, err := net.ResolveUDPAddr("udp4", raddr)
@@ -120,15 +119,21 @@ func DialWithOptions(raddr string, block kcp.BlockCrypt, dataShards, parityShard
 	if err != nil {
 		return nil, err
 	}
+	return
+}
+
+// DialWithOptions connects to the remote address "raddr" on the network "udp"/fake-tcp with packet encryption
+func DialWithOptions(raddr string, block kcp.BlockCrypt, dataShards, parityShards int, password string, mulconn int, udp bool) (*kcp.UDPSession, error) {
+	conn, err := DialUDP(raddr, password, mulconn, udp)
+	if err != nil {
+		return nil, err
+	}
+
 	return kcp.NewConn(raddr, block, dataShards, parityShards, conn)
 }
 
-// ListenWithOptions listens for incoming KCP packets addressed to the local address laddr on the network "udp" with packet encryption,
-// dataShards, parityShards defines Reed-Solomon Erasure Coding parameters
-func ListenWithOptions(laddr string, block kcp.BlockCrypt, dataShards, parityShards int, password string, usemul bool, udp bool) (*kcp.Listener, error) {
-	var conn net.PacketConn
-	var err error
-
+// ListenUDP listens for udp/fake-tcp
+func ListenUDP(laddr string, password string, usemul bool, udp bool) (conn net.PacketConn, err error) {
 	if udp {
 		udpaddr, err := net.ResolveUDPAddr("udp4", laddr)
 		if err != nil {
@@ -153,6 +158,17 @@ func ListenWithOptions(laddr string, block kcp.BlockCrypt, dataShards, paritySha
 
 	if usemul {
 		conn, err = mulcon.Listen(conn, mulconMethod, password)
+	}
+
+	return
+}
+
+// ListenWithOptions listens for incoming KCP packets addressed to the local address laddr on the network "udp"/fake-tcp with packet encryption,
+// dataShards, parityShards defines Reed-Solomon Erasure Coding parameters
+func ListenWithOptions(laddr string, block kcp.BlockCrypt, dataShards, parityShards int, password string, usemul bool, udp bool) (*kcp.Listener, error) {
+	conn, err := ListenUDP(laddr, password, usemul, udp)
+	if err != nil {
+		return nil, err
 	}
 
 	return kcp.ServeConn(block, dataShards, parityShards, conn)
@@ -181,4 +197,9 @@ func SetIgnRST(v bool) {
 // SetMixed if v is true, the server will accept both http request and tcp request
 func SetMixed(v bool) {
 	raw.Mixed = v
+}
+
+// SetDummy if v is ture, the client will use dummy socket to inititate three-way handshake
+func SetDummy(v bool) {
+	raw.Dummy = v
 }
