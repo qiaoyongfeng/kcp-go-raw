@@ -16,54 +16,40 @@ import (
 var (
 	raw rawcon.Raw
 
-	mssCache     map[string]int
-	mssCacheLock sync.Mutex
-
-	lisCache     map[string]*rawcon.RAWListener
-	lisCacheLock sync.Mutex
+	mssCache sync.Map
+	lisCache sync.Map
+	// mssCache     map[string]int
+	// lisCache     map[string]*rawcon.RAWListener
 )
 
 const (
 	mulconMethod = "chacha20-ietf"
 )
 
-func init() {
-	mssCache = make(map[string]int)
-	lisCache = make(map[string]*rawcon.RAWListener)
-}
-
 func GetMSSByAddr(laddr net.Addr, raddr net.Addr) int {
 	s := laddr.String() + raddr.String()
-	mssCacheLock.Lock()
-	defer mssCacheLock.Unlock()
-	mss, ok := mssCache[s]
+	mss, ok := mssCache.Load(s)
 	if ok {
-		return mss
+		return mss.(int)
 	}
 	return 0
 }
 
 func putMSSByAddr(laddr net.Addr, raddr net.Addr, mss int) {
 	s := laddr.String() + raddr.String()
-	mssCacheLock.Lock()
-	defer mssCacheLock.Unlock()
-	mssCache[s] = mss
+	mssCache.Store(s, mss)
 }
 
 func GetListenerByAddr(laddr net.Addr) *rawcon.RAWListener {
-	lisCacheLock.Lock()
-	defer lisCacheLock.Unlock()
-	lis, ok := lisCache[laddr.String()]
+	lis, ok := lisCache.Load(laddr.String())
 	if ok {
-		return lis
+		return lis.(*rawcon.RAWListener)
 	}
 	return nil
 }
 
 func putListenerByAddr(laddr net.Addr, lis *rawcon.RAWListener) {
-	lisCacheLock.Lock()
-	defer lisCacheLock.Unlock()
-	lisCache[laddr.String()] = lis
+	lisCache.Store(laddr.String(), lis)
 }
 
 func checkAddr(addr string) (err error) {
@@ -101,7 +87,9 @@ func DialRAW(raddr string, password string, mulconn int, udp bool, r *rawcon.Raw
 		dialer = func() (conn net.Conn, err error) {
 			rawconn, err := r.DialRAW(raddr)
 			conn = rawconn
-			putMSSByAddr(rawconn.LocalAddr(), rawconn.RemoteAddr(), rawconn.GetMSS())
+			if rawconn != nil && err == nil {
+				putMSSByAddr(rawconn.LocalAddr(), rawconn.RemoteAddr(), rawconn.GetMSS())
+			}
 			return
 		}
 	}
