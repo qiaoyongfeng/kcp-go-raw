@@ -64,6 +64,14 @@ func checkAddr(addr string) (err error) {
 	return
 }
 
+type fakeUDPConn struct {
+	*net.UDPConn
+}
+
+func (conn *fakeUDPConn) WriteTo(b []byte, _ net.Addr) (int, error) {
+	return conn.UDPConn.Write(b)
+}
+
 // DialRAW connects to the remote address raddr on the network udp/fake-tcp
 // mulconn is enabled if mulconn > 0
 func DialRAW(raddr string, password string, mulconn int, udp bool, r *rawcon.Raw) (conn utils.UDPConn, err error) {
@@ -101,7 +109,9 @@ func DialRAW(raddr string, password string, mulconn int, udp bool, r *rawcon.Raw
 		c, err = dialer()
 		c2, ok := c.(*net.UDPConn)
 		if ok {
-			conn = c2
+			conn = &fakeUDPConn{
+				UDPConn: c2,
+			}
 		} else {
 			conn = c.(*rawcon.RAWConn)
 		}
@@ -148,6 +158,7 @@ func ListenRAW(laddr string, password string, usemul bool, udp bool, r *rawcon.R
 
 	if usemul {
 		conn, err = mulcon.Listen(conn, mulconMethod, password)
+		conn.(*mulcon.Server).SetMixed(true)
 	}
 
 	return
