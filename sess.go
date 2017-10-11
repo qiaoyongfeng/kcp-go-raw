@@ -3,6 +3,7 @@ package kcpraw
 import (
 	"fmt"
 	"net"
+	"runtime"
 	"sync"
 
 	"github.com/ccsexyz/utils"
@@ -53,6 +54,9 @@ func putListenerByAddr(laddr net.Addr, lis *rawcon.RAWListener) {
 }
 
 func checkAddr(addr string) (err error) {
+	if runtime.GOOS == "linux" {
+		return
+	}
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
 		return
