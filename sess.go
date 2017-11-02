@@ -76,9 +76,24 @@ func (conn *fakeUDPConn) WriteTo(b []byte, _ net.Addr) (int, error) {
 	return conn.UDPConn.Write(b)
 }
 
-// DialRAW connects to the remote address raddr on the network udp/fake-tcp
-// mulconn is enabled if mulconn > 0
-func DialRAW(raddr string, password string, mulconn int, udp bool, r *rawcon.Raw) (conn utils.UDPConn, err error) {
+type RawOptions struct {
+	Addr     string
+	Password string
+	Mulconn  int
+	UseMul   bool
+	UDP      bool
+	R        *rawcon.Raw
+	// DataShard   int
+	// ParityShard int
+}
+
+func DialWithRawOptions(opt *RawOptions) (conn utils.UDPConn, err error) {
+	raddr := opt.Addr
+	mulconn := opt.Mulconn
+	password := opt.Password
+	udp := opt.UDP
+	r := opt.R
+
 	var dialer func() (conn net.Conn, err error)
 
 	if udp {
@@ -105,7 +120,6 @@ func DialRAW(raddr string, password string, mulconn int, udp bool, r *rawcon.Raw
 			return
 		}
 	}
-
 	if mulconn > 0 {
 		conn, err = mulcon.Dial(dialer, mulconn, mulconMethod, password)
 	} else {
@@ -126,6 +140,18 @@ func DialRAW(raddr string, password string, mulconn int, udp bool, r *rawcon.Raw
 	return
 }
 
+// DialRAW connects to the remote address raddr on the network udp/fake-tcp
+// mulconn is enabled if mulconn > 0
+func DialRAW(raddr string, password string, mulconn int, udp bool, r *rawcon.Raw) (conn utils.UDPConn, err error) {
+	return DialWithRawOptions(&RawOptions{
+		Addr:     raddr,
+		Password: password,
+		Mulconn:  mulconn,
+		UDP:      udp,
+		R:        r,
+	})
+}
+
 // DialWithOptions connects to the remote address "raddr" on the network "udp"/fake-tcp with packet encryption
 func DialWithOptions(raddr string, block kcp.BlockCrypt, dataShards, parityShards int, password string, mulconn int, udp bool) (*kcp.UDPSession, error) {
 	conn, err := DialRAW(raddr, password, mulconn, udp, &raw)
@@ -136,8 +162,13 @@ func DialWithOptions(raddr string, block kcp.BlockCrypt, dataShards, parityShard
 	return kcp.NewConn(raddr, block, dataShards, parityShards, conn)
 }
 
-// ListenRAW listens for udp/fake-tcp
-func ListenRAW(laddr string, password string, usemul bool, udp bool, r *rawcon.Raw) (conn net.PacketConn, err error) {
+func ListenWithRawOptions(opt *RawOptions) (conn net.PacketConn, err error) {
+	laddr := opt.Addr
+	password := opt.Password
+	usemul := opt.UseMul
+	udp := opt.UDP
+	r := opt.R
+
 	if udp {
 		udpaddr, err := net.ResolveUDPAddr("udp4", laddr)
 		if err != nil {
@@ -166,6 +197,17 @@ func ListenRAW(laddr string, password string, usemul bool, udp bool, r *rawcon.R
 	}
 
 	return
+}
+
+// ListenRAW listens for udp/fake-tcp
+func ListenRAW(laddr string, password string, usemul bool, udp bool, r *rawcon.Raw) (conn net.PacketConn, err error) {
+	return ListenWithRawOptions(&RawOptions{
+		Addr:     laddr,
+		Password: password,
+		UseMul:   usemul,
+		UDP:      udp,
+		R:        r,
+	})
 }
 
 // ListenWithOptions listens for incoming KCP packets addressed to the local address laddr on the network "udp"/fake-tcp with packet encryption,
