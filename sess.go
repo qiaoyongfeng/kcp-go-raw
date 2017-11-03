@@ -250,3 +250,8 @@ func SetMixed(v bool) {
 func SetDummy(v bool) {
 	raw.Dummy = v
 }
+
+// SetTLS enable tls obfs
+func SetTLS(v bool) {
+	raw.TLS = v
+}
