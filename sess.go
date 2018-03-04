@@ -143,6 +143,9 @@ func DialWithRawOptions(opt *RawOptions) (conn utils.UDPConn, err error) {
 // DialRAW connects to the remote address raddr on the network udp/fake-tcp
 // mulconn is enabled if mulconn > 0
 func DialRAW(raddr string, password string, mulconn int, udp bool, r *rawcon.Raw) (conn utils.UDPConn, err error) {
+	if r == nil {
+		r = &raw
+	}
 	return DialWithRawOptions(&RawOptions{
 		Addr:     raddr,
 		Password: password,
@@ -201,6 +204,9 @@ func ListenWithRawOptions(opt *RawOptions) (conn net.PacketConn, err error) {
 
 // ListenRAW listens for udp/fake-tcp
 func ListenRAW(laddr string, password string, usemul bool, udp bool, r *rawcon.Raw) (conn net.PacketConn, err error) {
+	if r == nil {
+		r = &raw
+	}
 	return ListenWithRawOptions(&RawOptions{
 		Addr:     laddr,
 		Password: password,
