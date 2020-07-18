@@ -6,8 +6,7 @@ import (
 	"runtime"
 	"sync"
 
-	"github.com/ccsexyz/utils"
-
+	
 	"github.com/ccsexyz/mulcon"
 	"github.com/ccsexyz/rawcon"
 	"github.com/pkg/errors"
